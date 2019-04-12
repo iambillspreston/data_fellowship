@@ -131,7 +131,15 @@ View(new_ting)
 
 #master['comfort_food_list2'] <- lapply(master['comfort_food_list'],strsplit,",") #strsplit(master['comfort_food_list'], ",")
 
-new_ting2 <- gsub("  ", " ", new_ting)
+newtinga <- gsub(" / ", ", ", new_ting)
+
+newtingb <- gsub("stres", "stress", newtinga)
+
+newtingc <- gsub("lazyniss", "laziness", newtingb)
+
+newtingd <- gsub("depression", "sadness", newtingc)
+
+new_ting2 <- gsub("  ", " ", newtingd)
 
 new_ting3 <- gsub("mac and cheese", "mac n cheese", new_ting2)
 
@@ -181,34 +189,35 @@ inspect(rules[1:30])
 
 ```{r}
 
-sad_rules = sort(
+stress_rules = sort(
   subset(rules, subset=lhs %in% 'stress'),
   by = 'lift',decreasing = T
 )
 
-inspect(sad_rules[1:20])
+inspect(stress_rules[1:20])
 
 ```
 
 ```{r}
-sad_rules2 = DATAFRAME(sad_rules)
-#sadder_rules = subset(sad_rules, subset=!(rhs %in% 'excited')
+stress_rules2 = DATAFRAME(stress_rules)
 
-
-sad_rules2[sad_rules2['LHS'] == "{stress}", ]
+stress_rules2[stress_rules2['LHS'] == "{stress}", ]
 ```
+
 
 ```{r}
 
-happy_rules = sort(
-  subset(rules, subset=lhs %in% 'happiness'),
+sadness_rules = sort(
+  subset(rules, subset=lhs %in% 'sadness'),
   by = 'lift',decreasing = T
 )
-happy_rules2 = DATAFRAME(happy_rules)
+sadness_rules2 = DATAFRAME(sadness_rules)
 #sadder_rules = subset(sad_rules, subset=!(rhs %in% 'excited')
 
 
-happy_rules2[happy_rules2['LHS'] == "{happiness}", ]
-
+sadness_rules2[sadness_rules2['LHS'] == "{sadness}", ]
 ```
 
+
+#IF condition
+# dataset$thing[dataset$marital_status == 2] <- 15
