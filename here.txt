@@ -1,1 +1,1 @@
-https://www.kaggle.com/manjeetsingh/retaildataset
+https://www.kaggle.com/carrie1/ecommerce-data
