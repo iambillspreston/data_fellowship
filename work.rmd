@@ -1,0 +1,214 @@
+---
+title: "Hi"
+output: html_notebook
+---
+
+
+
+```{r}
+
+library(tidyverse)
+library(arules)
+library(dbplyr)
+library(ggplot2)
+library(backports)
+library(reshape)
+
+```
+
+# Let's set the working directory to where our data is
+
+```{r}
+
+setwd("C:/Users/Decoded/Downloads/food-choices")
+
+
+```
+
+# Now let's read this in 
+
+```{r}
+
+master <- read.csv("food_coded.csv")
+View(master)
+
+```
+
+# We need a method of creating a true false flag for the comfort reasons
+# The grepl function is one we can use to convert string searches into YN flags
+
+```{r}
+
+
+
+?grepl()
+
+```
+
+# We can save the search for Boredom as a comfort rule reason
+
+```{r}
+
+master$boredom_check <- grepl('Boredom', master$comfort_food_reasons,  ignore.case = TRUE )
+
+```
+
+
+# we can repeat the same exercise for each of the other reasons
+
+```{r}
+
+master$boredom_check <- grepl('Boredom', master$comfort_food_reasons,  ignore.case = TRUE )
+
+master$stress_check <- grepl('stress', master$comfort_food_reasons,  ignore.case = TRUE )
+
+master$hunger_check <- grepl('hunger', master$comfort_food_reasons,  ignore.case = TRUE )
+
+master$anger_check <- grepl('anger', master$comfort_food_reasons,  ignore.case = TRUE )
+
+
+master$laziness_check <- grepl('laziness', master$comfort_food_reasons,  ignore.case = TRUE )
+
+master$weather_check <- grepl('weather', master$comfort_food_reasons,  ignore.case = TRUE )
+
+master$happiness_check <- grepl('happiness', master$comfort_food_reasons,  ignore.case = TRUE )
+
+master$tv_check <- grepl('tv', master$comfort_food_reasons,  ignore.case = TRUE )
+
+master$none_check <- grepl('none', master$comfort_food_reasons,  ignore.case = TRUE )
+
+
+master$sad1 <- grepl('sad', master$comfort_food_reasons,  ignore.case = TRUE )
+  
+master$sad2 <-  grepl('depress', master$comfort_food_reasons,  ignore.case = TRUE )
+master$sad_check <- FALSE
+master$sad_check[master$sad1 == TRUE | master$sad2 == TRUE] <- TRUE
+  
+master$sad1 <- NULL
+
+master$sad2 <- NULL
+
+```
+
+
+
+```{r}
+
+
+
+
+
+
+```
+
+
+
+
+
+
+# Now convert the comfort food items to lower case so that these are all lower case
+
+# Then create a field in the transactions type so that we can perform some apriori association analysis on them
+
+```{r}
+
+master$comfort_food_list <- tolower(master$comfort_food)
+master$reasons_list <-tolower(master$comfort_food_reasons)
+
+
+new_ting <- paste(master$reasons_list, ", "  ,master$comfort_food_list)
+
+?gsub
+
+View(new_ting)
+```
+
+# apply to data frame not strings or vector of strings
+
+# general function
+
+```{r}
+
+#master['comfort_food_list2'] <- lapply(master['comfort_food_list'],strsplit,",") #strsplit(master['comfort_food_list'], ",")
+
+new_ting2 <- gsub("  ", " ", new_ting)
+
+new_ting3 <- gsub("mac and cheese", "mac n cheese", new_ting2)
+
+new_ting4 <- gsub(" and ", ", ", new_ting3)
+
+new_ting5 <- gsub("\\.", "", new_ting4)
+
+new_ting6 <- gsub(" ,", ",",  new_ting5)
+
+new_ting7 <- gsub(",,", ",",  new_ting6)
+
+new_ting8 <- gsub(" ,", ",",  new_ting7)
+
+new_ting9 <- gsub("they taste better than other food they are a pickme up they are easy to make", "taste", new_ting8)
+
+new_ting10 <- gsub("grandma homemade chocolate cake anything homemade", "cake", new_ting9)
+
+new_ting11 <-   gsub("i don/'t eat comfort food i just eat when i'm hungry", "hunger", new_ting10)
+
+
+
+second_thing <- strsplit(new_ting11 , ", ")
+
+ third_thing <- sapply(second_thing, trimws )
+
+baskets <- as(third_thing, "transactions")
+
+inspect(baskets[1:10])
+```
+
+
+```{r}
+
+rules = apriori(data=baskets,parameter=list(support=0.001, confidence=0.3, maxlen=10))
+
+```
+
+```{r}
+
+inspect(rules[1:30])
+
+
+```
+
+
+
+
+```{r}
+
+sad_rules = sort(
+  subset(rules, subset=lhs %in% 'stress'),
+  by = 'lift',decreasing = T
+)
+
+inspect(sad_rules[1:20])
+
+```
+
+```{r}
+sad_rules2 = DATAFRAME(sad_rules)
+#sadder_rules = subset(sad_rules, subset=!(rhs %in% 'excited')
+
+
+sad_rules2[sad_rules2['LHS'] == "{stress}", ]
+```
+
+```{r}
+
+happy_rules = sort(
+  subset(rules, subset=lhs %in% 'happiness'),
+  by = 'lift',decreasing = T
+)
+happy_rules2 = DATAFRAME(happy_rules)
+#sadder_rules = subset(sad_rules, subset=!(rhs %in% 'excited')
+
+
+happy_rules2[happy_rules2['LHS'] == "{happiness}", ]
+
+```
+
