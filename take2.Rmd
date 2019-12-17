@@ -1,0 +1,268 @@
+---
+title: "TimeSeries -  Predicting the Price of Bitcoin"
+author: "Seb Spiers"
+date: "11 Dec 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+
+# install.packages("tseries")
+#install.packages("dplyr")
+#install.packages("dynsim")
+#install.packages("smooth")
+```
+
+
+# First, the libraries that are required for this exercise are loaded
+
+```{r}
+
+library(dplyr)
+library(ggplot2)
+library(xts)
+library(lubridate)
+library(readr)
+library(dynsim)
+library(forecast)
+library(smooth)
+library(tidyverse)
+library(tseries)
+
+```
+
+
+# I've sourced daily Bitcoin trading data from an exchange tranding platform called Gemini, which gives historic trading data in North America.  The input data was sourced from the website
+
+# http://www.cryptodatadownload.com/data/northamerican/ and contains daily data on the exchange rate (BTC to USD) and trading volume (in USD) from October 2015 to December 2019.
+
+# Bitcoin data has been chosen because it is expected to show both trend and seasonality and trading data should in theory make it relatively simple to convert into a time series object.
+
+```{r}
+setwd("C:/Users/Decoded/Downloads")
+#setwd("S:/prod/actuarial/analysis/Seb/PACE/Foundation")
+
+bitcoinprices <- read.csv("Gemini_BTCUSD_d.csv", skip = 1)
+
+head(bitcoinprices)
+
+str(bitcoinprices)
+
+```
+
+# The working directory is set and the input data is read in, skipping an empty first record in the .csv file.
+
+# The first 6 records and metadata are inspected by using the head() and str() functions respectively.  The data appears to be sorted in reverse chronological order and populated for each day between October 2015 and December 2019
+
+# To ensure that the data is correctly structured and ordered, the data can be sorted by Date.  As the date is in a "Factor" this can be converted into a date object and the data frame then sorted.
+
+
+
+
+
+```{r}
+
+bitcoinprices$PriceDate <- as.Date(bitcoinprices$Date, format = "%Y-%m-%d")
+
+bitcoin_sorted <- bitcoinprices[with(bitcoinprices,order(PriceDate)), ]
+
+```
+
+# This sorted data is then subset and saved in two new data frames, one which will be used to generate a time series containing historic price data, and the other containing historic trading volume data in total US dollar amount.
+
+```{r}
+
+Bitcoin_Price <- data.frame(
+                            "date" = bitcoin_sorted$PriceDate,
+                            "closing_price" = bitcoin_sorted$Close
+                            )
+
+Bitcoin_Volume <- data.frame(
+                            "date" = bitcoin_sorted$PriceDate,
+                            "volume_usd" = bitcoin_sorted$Volume.USD
+                            )
+```
+
+# Time series are then created from these data frames with a frequency of 365, starting from October the 12th, which is the 285th day of 2015.
+
+# The time series are then plotted using the plot function:
+
+```{r}
+
+series_price <- ts(Bitcoin_Price$closing_price, frequency = 365, start=c(2015,285))
+series_volume <- ts(Bitcoin_Volume$volume_usd, frequency = 365, start=c(2015,285))
+
+plot.ts(series_price)
+plot.ts(series_volume)
+
+```
+
+# The price appears to increase exponentially between 2015 and January 2018 and then dip to a low in 2019, before rallying to another high in Mid 2019.  It is possible that there is some seasonality also in the data as well as an upward trend.  It would appear that this time series is multiplicative
+
+# The trading volume shows similar peaks at the start of 2018 and in mid-2019, but unlike the price data does not appear to show a clear increasing trend.  It would appear that this time series is additive.
+
+```{r}
+
+plot(decompose(series_volume), ylab= "usd_volume")
+
+plot(decompose(series_volume, type = "multiplicative"), ylab= "usd_volume")
+
+plot(decompose(series_volume), ylab = "price in USD")
+
+plot(decompose(series_price, type = "multiplicative"), ylab="price in USD")
+
+
+```
+
+# In order to investigate the seasonality of the Trading volume it might be worth converting the data into monthly amounts
+
+```{r}
+Bitcoin_Volume_Monthly <- Bitcoin_Volume %>% 
+    mutate(month = format(date, "%m"), year = format(date,"%Y")) %>%
+    group_by(month,year) %>%
+    summarise(total_volume=sum(volume_usd))
+```
+
+# The format of the date field is changed to monthly, and then grouped by the month and year fields that are generated and summing the volume, giving 12 observations per year.
+
+```{r}
+Bitcoin_Volume_Monthly$date2 <- as.Date(paste(Bitcoin_Volume_Monthly$year,"-",Bitcoin_Volume_Monthly$month,"-01",sep=""))
+```
+
+# The day information was lost in grouping the data in the last step.  The date2 field is set with "01" at the start of each month.  A data frame is then created that is ordered by this field, ready to be used to create a monthly time series object
+```{r}
+Bitcoin_Volume_Monthly_tsdf <- data.frame( "date"=Bitcoin_Volume_Monthly$date2,
+                                        "USD_Volume"=Bitcoin_Volume_Monthly$total_volume)[with(Bitcoin_Volume_Monthly,order(date2)), ]
+usd_volume_ts <- ts(Bitcoin_Volume_Monthly_tsdf$USD_Volume, frequency = 12, start=c(2015,10)) 
+
+```
+
+# Now that the data is converted into monthly data this can be plotted as a box plot to look at behaviour over the course of a calendar year:
+
+```{r}
+
+boxplot(usd_volume_ts~cycle(usd_volume_ts),     names=c("Jan","Feb","Mar","Apr","May","June","July","Aug","Sep","Oct","Nov","Dec"), ylab= "Volume Traded in USD", xlab="Month")
+
+```
+
+
+# The median value is lower in the winter months, but these months also contain days with the highest trading volumes.  Summer months show trading volumes that have fewer days with large trading numbers, but with more consistently increased volumes.
+
+# This data only contains 3 years of data and the trading volumes at the end of 2017 are so large that some are anomalous in the context of the remaining data.  On the 22nd december 2017, 560 million USD were traded compared to the data set's mean of 21.8 million USD per day.
+
+```{r}
+mean(bitcoinprices$Volume.USD)
+```
+
+# Next let's test stationarity.  This is to say whether or not the mean and variance stays the same.  It is evident from seeing the trend of the Bitcoin price that the price is expected not to be non-stationary.  The KPSS test can be performed on the time series in order to determine whether the time series are non-stationary or whether the null hypothesis (i.e. that the time series are stationary) should be accepted
+
+```{r}
+
+kpss.test(usd_volume_ts)
+
+kpss.test(series_price)
+
+```
+
+# The p-value for the price series is smaller than the threshold p-value of 0.05 and it can be concluded that as expected the price of Bitcoin is non-stationary.  With a p-value of 0.1, we can't draw a conclusion that the Bitcoin trading volume in USD is non-stationary, so the null hyposthesis is accepted - it is assumed that it is stationary.
+
+# The price data in the plot above appears to have an exponentially increasing mean.  By taking a natural log this can in theory be reduced to a linear trend.
+
+```{r}
+plot(log(series_price))
+
+```
+
+# By using the diff() function the price time series could be restated using the diff function, which will instead give a time series which shows the difference between consecutive values of a series or vector
+
+
+```{r}
+
+plot(diff(log(series_price)))
+     
+```
+
+# The graph appears to indicate that the mean of the result could be closer to 0.
+
+# Next the stationarity of this series is tested using the kpss test.  If the non-stationarity has been removed, then the p-value will be 0.05 or smaller.
+
+```{r}
+
+kpss.test(diff(log(series_price)))
+
+```
+
+# The p-value is larger than 0.05 and can be treated as being stationary.
+
+# An ARIMA model can be applied to this log of the price which can then be used to forecast the price, but first let's predict whether the price is better described using an auto regression (AR) or moving average model (MA), which can be performed by using the Auto Correlation and Partial Auto Correlation Function (ACF and PACF) on the time series of the log of the price
+
+# ACF and PACF
+
+```{r}
+acf(log(series_price))
+```
+
+# None of the terms appear to reduce below the significance threshold.
+
+#It can be seen in the Total Correlation Chart above that there is a dependance between term(x) and term (x-1).  For a moving average series we would expect the correlation chart to cut off at lag x.  The correlation is gradually decreasing, indicating that it is likely to be an Auto-Regression series.
+
+# To find out what order it is, the partial correlation function is used:
+
+```{r}
+pacf(log(series_price))
+```
+# It cuts off dramatically after the first lag term, indicating that the series is best described using a first order Auto-Regression process.
+
+```{r}
+acf(usd_volume_ts)
+pacf(usd_volume_ts)
+```
+
+# The auto correlation function cuts off after the 4th term.
+
+# Similarly, the Partial correlation function cuts off after the first term for the Bitcoin trading volume time series, and would also be best described using a first order Auto-Regression process.
+
+# An ARIMA model can be applied to this log of the price and on the trading volumes inn usd which can then be used to forecast future values.
+
+```{r}
+
+model_price <- auto.arima(log(series_price))
+
+plot(exp(model_price$x), col = "red")
+lines(exp(model_price$fitted), col = "blue")
+
+forecast_price <- forecast(model_price)
+plot(forecast_price)
+
+```
+
+# The model generated automatically is a random walk with drift, which is a random movement where movement in a positive or negative direction has an equivalent probability, except where there is a constant added (the drift) to reflect the change in the mean (which in this case is increasing).
+
+```{r}
+
+#model_volume <- auto.arima(usd_volume_ts)
+
+model_volume <- Arima(usd_volume_ts/1000, order=c(1,0,4))
+
+plot((model_volume$x), col = "red")
+lines((model_volume$fitted), col = "blue")
+
+forecast_volume <- forecast(model_volume)
+plot(forecast_volume)
+
+
+?auto.arima
+#?plot
+```
+
+# It's possible to see that the model to describe trading volumes does not match the experience data as closely as the price forecast did.  There is a substantial amount of "shock" in the data due to the influence media hype, inflation and subsequent bursting of the bitcoin bubble had over prices and trading volumes over December 2017 and January 2018.  The ARIMA model relies on previous values in order to predict future ones, and the values over this two month period are anomalous and extraordinary, as was seen in the box plot for the monthly trading volumes.  
+
+# The negative territory the ARIMA forecast oredicts into 2021 and 2022 is a reflection of this shortcoming in the use of this method to pridict future values.
+
+
